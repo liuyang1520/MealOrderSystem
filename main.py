@@ -13,6 +13,7 @@ import collections
 import unittest
 
 
+# Define constant food names here
 NORMAL = "normal"
 VEGETARIAN = "vegetarian"
 GLUTEN_FREE = "gluten_free"
@@ -22,11 +23,24 @@ TOTAL = "total"
 
 
 class Restaurant(object):
+	"""Restaurant model class
+	We assume there will be multiple teams ordering food.
+	So we use _capacity to track the total food can be provided,
+	and _foodInStock to track the food left.
+	These parameters can be refreshed manually or when re-init the object.
+	"""
 	def __init__(self, name, rate, capacity):
+		"""
+		Args:
+			name: restaurant name, e.g., "rest1"
+			rate: rate number, e.g., 5
+			capacity: dictionary, e.g., {NORMAL: 38, VEGETARIAN: 5}
+		"""
 		self._name = name
 		self._rate = rate
 		self._capacity = capacity
-		self._orderHistory = collections.defaultdict(list)
+		self._orderHistory = []
+		# a deep copy would be better for safety issue, should be fine in this case
 		self._foodInStock = capacity.copy()
 
 	@property
@@ -43,7 +57,9 @@ class Restaurant(object):
 
 	@capacity.setter
 	def capacity(self, capacity):
+		# reset capacity, and food available
 		self._capacity = capacity
+		self._foodInStock = capacity.copy()
 
 	def addOrder(self, teamName, order):
 		"""Process order, record order in _orderHistory
@@ -62,7 +78,7 @@ class Restaurant(object):
 		# update food left in stock, and record the order
 		for meal in order:
 			self._foodInStock[meal] -= order[meal]
-		self._orderHistory[teamName].append(order) 
+		self._orderHistory.append((teamName, order)) 
 
 	@property
 	def checkFood(self):
@@ -70,24 +86,31 @@ class Restaurant(object):
 
 	def __str__(self):
 		description = """
-		======================
+		================================
 		Restaurant: {0}
 		Rate: {1}
 		Capacity: {2}
 		Food Available: {3}
 		Order History: {4}
-		======================
-		""".format(self._name, self._rate, self._capacity, self._foodInStock, self._orderHistory)
+		================================
+		""".format(self._name, 
+			self._rate, 
+			OrderSystem.formatOrder(self._capacity), 
+			OrderSystem.formatOrder(self._foodInStock), 
+			OrderSystem.formatOrderList(self._orderHistory))
 		return description
 
 
 class Team(object):
 	"""Team model class
-	name: a string of team name
-	demand: a dictionary contains the orders for this team
-
+	_orderResult stores the order history of current team.
 	"""
 	def __init__(self, name, demand):
+		"""
+		Args:
+			name: a string of team name
+			demand: a dictionary contains the orders for this team
+		"""
 		self._name = name
 		self._demand = demand
 		self._orderResult = []
@@ -105,24 +128,29 @@ class Team(object):
 		return self._name
 
 	def addOrder(self, restName, order):
+		# update orderResult
 		self._orderResult.append((restName, order))
 
 	def __str__(self):
 		description = """
-		======================
+		================================
 		Team: {0}
 		Meal Order: {1}
 		Order Result: {2}
-		======================
-		""".format(self._name, self._demand, self._orderResult)
+		================================
+		""".format(self._name, 
+			OrderSystem.formatOrder(self._demand), 
+			OrderSystem.formatOrderList(self._orderResult))
 		return description
 
 
 class OrderSystem(object):
 	"""
 	1. This class can be instantiated as a FIFO to process orders for multiple teams;
-	2. This is also a delegation class, providing methods to optimize orders.
+	2. This is also a delegation class, providing methods to optimize orders and format orders.
+	optimizeOrder can be used as a stand alone method
 	"""
+	COMMON_INDENT = "\n" + "\t"*3
 	FOODTYPE = [NORMAL, 
 				VEGETARIAN, 
 				GLUTEN_FREE, 
@@ -166,6 +194,8 @@ class OrderSystem(object):
 			restaurantList.sort(key = lambda x: (x.rate, sum(x.checkFood().values())), reverse = True)
 		demand, orderResultList = team.demand.copy(), []
 		for rest in restaurantList:
+			if sum(rest.checkFood.values()) == 0:
+				continue
 			orderResult = collections.OrderedDict()
 			for foodType in OrderSystem.FOODTYPE:
 				if foodType in demand and foodType in rest.checkFood:
@@ -180,9 +210,39 @@ class OrderSystem(object):
 			if demand[foodType] > 0:
 				raise Exception("Order from team-{} cannot be satisfied on food type {}".format(team.name, foodType))
 
+	@staticmethod
+	def formatOrder(order):
+		"""Takes an order dictionary and return a formatted string
+		Args:
+			order: dictionary
+		Returns:
+			orderStr: a string
+		"""
+		orderStr = ""
+		for foodType in OrderSystem.FOODTYPE:
+			if foodType in order:
+				orderStr += OrderSystem.COMMON_INDENT + "{foodType} = {count}".format(foodType = foodType, count = order[foodType])
+		return orderStr
+
+	@staticmethod
+	def formatOrderList(orderList):
+		"""Takes an order list and return a formatted string
+		Args:
+			order: list of dictionary
+		Returns:
+			orderStr: a string
+		"""
+		orderStr = ""
+		for name, order in orderList:
+			orderStr += OrderSystem.COMMON_INDENT + name + ":"
+			for foodType in OrderSystem.FOODTYPE:
+				if foodType in order:
+					orderStr += OrderSystem.COMMON_INDENT + "\t{foodType} = {count}".format(foodType = foodType, count = order[foodType])
+		return orderStr
+
 
 class OrderSystemTests(unittest.TestCase):
-	def dtestSingleTeamTestWithUniqueRates(self):
+	def testSingleTeamTestWithUniqueRates(self):
 		team1 = Team("cisco1",  
 			{	
 				NORMAL: 38,
@@ -205,7 +265,7 @@ class OrderSystemTests(unittest.TestCase):
 		print rest1
 		print rest2
 
-	def dtestSingleTeamTestWithEqualRates(self):
+	def testSingleTeamTestWithEqualRates(self):
 		team1 = Team("cisco1",  
 			{	
 				NORMAL: 38,
