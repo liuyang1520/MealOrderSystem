@@ -19,7 +19,7 @@ VEGETARIAN = "vegetarian"
 GLUTEN_FREE = "gluten_free"
 NUT_FREE = "nut_free"
 FISH_FREE = "fish_free"
-TOTAL = "total"
+SUBTOTAL = "SUBTOTAL"
 
 
 class Restaurant(object):
@@ -127,6 +127,10 @@ class Team(object):
 	def name(self):
 		return self._name
 
+	@property
+	def orderResult(self):
+		return self._orderResult
+
 	def addOrder(self, restName, order):
 		# update orderResult
 		self._orderResult.append((restName, order))
@@ -161,6 +165,10 @@ class OrderSystem(object):
 		self.FIFO = []
 
 	def addTeam(self, team):
+		"""Add team/teams to the FIFO
+		Args:
+			team: a team object or a list of team objects
+		"""
 		if isinstance(team, Team):
 			self.FIFO.append(team)
 		elif isinstance(team, list):
@@ -168,6 +176,7 @@ class OrderSystem(object):
 				self.FIFO.append(i)
 
 	def processOrder(self, restaurantList, chooseLargeRestWhenEqualRate = False):
+		# process the orders in the FIFO
 		while self.FIFO:
 			team = self.FIFO.pop(0)
 			OrderSystem.optimizeOrder(team, restaurantList, chooseLargeRestWhenEqualRate)
@@ -191,7 +200,7 @@ class OrderSystem(object):
 		if not chooseLargeRestWhenEqualRate:
 			restaurantList.sort(key = lambda x: x.rate, reverse = True)
 		else:
-			restaurantList.sort(key = lambda x: (x.rate, sum(x.checkFood().values())), reverse = True)
+			restaurantList.sort(key = lambda x: (x.rate, sum(x.checkFood.values())), reverse = True)
 		demand, orderResultList = team.demand.copy(), []
 		for rest in restaurantList:
 			if sum(rest.checkFood.values()) == 0:
@@ -218,10 +227,12 @@ class OrderSystem(object):
 		Returns:
 			orderStr: a string
 		"""
-		orderStr = ""
+		orderStr, subTotal = "", 0
 		for foodType in OrderSystem.FOODTYPE:
 			if foodType in order:
 				orderStr += OrderSystem.COMMON_INDENT + "{foodType} = {count}".format(foodType = foodType, count = order[foodType])
+				subTotal += order[foodType]
+		orderStr += OrderSystem.COMMON_INDENT + "-> {} = {}".format(SUBTOTAL, subTotal)
 		return orderStr
 
 	@staticmethod
@@ -234,21 +245,24 @@ class OrderSystem(object):
 		"""
 		orderStr = ""
 		for name, order in orderList:
+			subTotal = 0
 			orderStr += OrderSystem.COMMON_INDENT + name + ":"
 			for foodType in OrderSystem.FOODTYPE:
 				if foodType in order:
 					orderStr += OrderSystem.COMMON_INDENT + "\t{foodType} = {count}".format(foodType = foodType, count = order[foodType])
+					subTotal += order[foodType]
+			orderStr += OrderSystem.COMMON_INDENT + "\t-> {} = {}".format(SUBTOTAL, subTotal)
 		return orderStr
 
 
 class OrderSystemTests(unittest.TestCase):
 	def testSingleTeamTestWithUniqueRates(self):
 		team1 = Team("cisco1",  
-			{	
-				NORMAL: 38,
-				VEGETARIAN: 5,
-				GLUTEN_FREE: 7,
-			})
+				{	
+					NORMAL: 38,
+					VEGETARIAN: 5,
+					GLUTEN_FREE: 7,
+				})
 		rest1 = Restaurant("rest1", 5, 
 				{
 					NORMAL: 36,
@@ -260,47 +274,86 @@ class OrderSystemTests(unittest.TestCase):
 					VEGETARIAN: 20,
 					GLUTEN_FREE: 20,
 				})
+		self.assertEqual(team1.name, "cisco1")
+		self.assertEqual(rest1.name, "rest1")
+		self.assertEqual(rest2.checkFood[VEGETARIAN], 20)
 		OrderSystem.optimizeOrder(team1, [rest1, rest2])
-		print team1
-		print rest1
-		print rest2
+		result1 = collections.OrderedDict([('normal', 36), ('vegetarian', 4)])
+		result2 = collections.OrderedDict([('normal', 2), ('vegetarian', 1), ('gluten_free', 7)])
+		self.assertEqual(team1.orderResult[0][1], result1)
+		self.assertEqual(team1.orderResult[1][1], result2)
 
-	def testSingleTeamTestWithEqualRates(self):
+
+	def testSingleTeamTestWithEqualRatesChooseLargerOff(self):
 		team1 = Team("cisco1",  
-			{	
-				NORMAL: 38,
-				VEGETARIAN: 5,
-				GLUTEN_FREE: 7,
-			})
-		rest1 = Restaurant("rest1", 5, 
-				{
-					NORMAL: 36,
-					VEGETARIAN: 4,
+				{	
+					NORMAL: 50,
+					VEGETARIAN: 32,
+					GLUTEN_FREE: 13,
+					FISH_FREE: 20
 				})
-		rest2 = Restaurant("rest2", 3, 
+		rest1 = Restaurant("rest1", 4.0, 
+				{
+					NORMAL: 40,
+					VEGETARIAN: 10,
+					FISH_FREE: 15
+				})
+		rest2 = Restaurant("rest2", 4.0, 
 				{
 					NORMAL: 60,
-					VEGETARIAN: 20,
+					VEGETARIAN: 40,
 					GLUTEN_FREE: 20,
+					FISH_FREE: 20
 				})
 		OrderSystem.optimizeOrder(team1, [rest1, rest2])
-		print team1
-		print rest1
-		print rest2
+		self.assertEqual(rest1.rate, rest2.rate)
+		result1 = collections.OrderedDict([('normal', 40), ('vegetarian', 10), ('fish_free', 15)])
+		result2 = collections.OrderedDict([('normal', 10), ('vegetarian', 22), ('gluten_free', 13), ('fish_free', 5)])
+		self.assertEqual(team1.orderResult[0][1], result1)
+		self.assertEqual(team1.orderResult[1][1], result2)
+
+	def testSingleTeamTestWithEqualRatesChooseLargerOn(self):
+		team1 = Team("cisco1",  
+				{	
+					NORMAL: 50,
+					VEGETARIAN: 32,
+					GLUTEN_FREE: 13,
+					FISH_FREE: 20
+				})
+		rest1 = Restaurant("rest1", 4.0, 
+				{
+					NORMAL: 40,
+					VEGETARIAN: 10,
+					FISH_FREE: 15
+				})
+		rest2 = Restaurant("rest2", 4.0, 
+				{
+					NORMAL: 60,
+					VEGETARIAN: 40,
+					GLUTEN_FREE: 20,
+					FISH_FREE: 10
+				})
+		# We choose larger restaurant when rates are equal this time
+		OrderSystem.optimizeOrder(team1, [rest1, rest2], chooseLargeRestWhenEqualRate = True)
+		result1 = collections.OrderedDict([('normal', 50), ('vegetarian', 32), ('gluten_free', 13), ('fish_free', 10)])
+		result2 = collections.OrderedDict([('normal', 0), ('vegetarian', 0), ('fish_free', 10)])
+		self.assertEqual(team1.orderResult[0][1], result1)
+		self.assertEqual(team1.orderResult[1][1], result2)
+		
 
 	def testMultipleTeamTest(self):
 		team1 = Team("cisco1",  
-			{	
-				NORMAL: 38,
-				VEGETARIAN: 5,
-				GLUTEN_FREE: 7,
-			})
+				{	
+					NORMAL: 38,
+					VEGETARIAN: 5,
+					GLUTEN_FREE: 7,
+				})
 		team2 = Team("cisco2",  
-			{	
-				NORMAL: 30,
-				VEGETARIAN: 8,
-				GLUTEN_FREE: 10,
-			})
+				{	
+					NORMAL: 30,
+					VEGETARIAN: 8,
+					GLUTEN_FREE: 10,
+				})
 		rest1 = Restaurant("rest1", 5, 
 				{
 					NORMAL: 36,
@@ -315,6 +368,12 @@ class OrderSystemTests(unittest.TestCase):
 		orderSystem = OrderSystem()
 		orderSystem.addTeam([team1, team2])
 		orderSystem.processOrder([rest1, rest2])
+		team1_result1 = collections.OrderedDict([('normal', 36), ('vegetarian', 4)])
+		team1_result2 = collections.OrderedDict([('normal', 2), ('vegetarian', 1), ('gluten_free', 7)])
+		team2_result1 = collections.OrderedDict([('normal', 30), ('vegetarian', 8), ('gluten_free', 10)])
+		self.assertEqual(team1.orderResult[0][1], team1_result1)
+		self.assertEqual(team1.orderResult[1][1], team1_result2)
+		self.assertEqual(team2.orderResult[0][1], team2_result1)
 		print team1
 		print team2
 		print rest1
