@@ -1,6 +1,10 @@
 # MealOrderSystem
 This is a simple meal order system designed for Cisco.
 
+An [simple UML](https://drive.google.com/file/d/0B02PwIf2SOMCWFB2MjdjOVlVbG8/view?usp=sharing) for the system:
+
+![preview](https://github.com/liuyang1520/MealOrderSystem/blob/master/meal_order_system.png)
+
 To clone it
 ```bash
 git clone https://github.com/liuyang1520/MealOrderSystem
